@@ -21,7 +21,8 @@ def main():
     
     # ID del tuo foglio principale
     spreadsheet_id = "1s68pw0WEUcV0ZqltiahAqCp_r5rsycSjxKNh0VZQq_g"
-sheet = gc.open_by_key(spreadsheet_id).worksheet('DATABASE_IMMOBILI')    
+    sheet = gc.open_by_key(spreadsheet_id).worksheet('DATABASE_IMMOBILI')
+    
     dati = sheet.get_all_values()
     if len(dati) <= 1:
         print("Database vuoto.")
