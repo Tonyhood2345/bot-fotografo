@@ -1,0 +1,29 @@
+name: Bot Fotografo - Estrattore Anteprime Reels
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' # Gira da solo in automatico ogni 30 minuti
+  workflow_dispatch: # Ti permette di farlo partire a mano premendo un pulsante su GitHub
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Configurazione Codice
+      uses: actions/checkout@v3
+
+    - name: Configurazione Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Installazione Dipendenze Tecniche
+      run: |
+        pip install gspread google-auth google-api-python-client
+        sudo apt-get update && sudo apt-get install -y ffmpeg
+
+    - name: Esecuzione Script Fotografo
+      env:
+        GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+      run: python estrattore.py
