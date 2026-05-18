@@ -2,8 +2,8 @@ name: Bot Fotografo - Estrattore Anteprime Reels
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Gira da solo in automatico ogni 30 minuti
-  workflow_dispatch: # Ti permette di farlo partire a mano premendo un pulsante su GitHub
+    - cron: '*/30 * * * *' # Gira in automatico ogni 30 minuti
+  workflow_dispatch: # Permette l'avvio manuale
 
 jobs:
   build:
@@ -11,10 +11,10 @@ jobs:
 
     steps:
     - name: Configurazione Codice
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4 # 👈 Aggiornato a v4 (risolve il warning)
 
     - name: Configurazione Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5 # 👈 Aggiornato a v5 (risolve il warning)
       with:
         python-version: '3.10'
 
