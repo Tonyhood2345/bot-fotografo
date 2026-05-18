@@ -32,7 +32,7 @@ def main():
     headers = [h.strip().lower() for h in dati[0]]
     try:
         idx_anteprima = headers.index('anteprima')
-        # Cerca la colonna indipendentemente da come è indicizzata (indice 20 o nome)
+        # Cerca la colonna indipendentemente da come è indicizzata
         idx_drive = headers.index('cartella drive') if 'cartella drive' in headers else 20
     except ValueError:
         print("Errore: Colonne 'Anteprima' o 'Cartella Drive' non trovate nel foglio.")
@@ -98,7 +98,7 @@ def main():
             permission = {'type': 'anyone', 'role': 'reader'}
             drive_service.permissions().create(fileId=foto_id, body=permission).execute()
             
-            # 5. Scrittura del link sul Foglio Google (Formato formula =IMAGE per vederla subito)
+            # 5. Scrittura del link sul Foglio Google
             link_diretto_foto = f'https://docs.google.com/uc?export=download&id={foto_id}'
             formula_immagine = f'=IMAGE("{link_diretto_foto}")'
             
