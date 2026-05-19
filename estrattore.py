@@ -13,8 +13,7 @@ except ImportError:
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
-import io
+from googleapiclient.http import MediaFileUpload
 
 def main():
     # 1. Autenticazione Sicura
@@ -49,11 +48,11 @@ def main():
         idx_foto3 = headers.index('foto_bot_3')
         idx_foto4 = headers.index('foto_bot_4')
         idx_foto5 = headers.index('foto_bot_5')
-    except ValueError as e:
-        print(f"❌ Errore: Colonne mancanti. Assicurati di avere Foto_Bot_1, Foto_Bot_2... scritte bene nella riga 1.")
+    except ValueError:
+        print("❌ Errore: Colonne mancanti. Assicurati di avere Foto_Bot_1, Foto_Bot_2... scritte bene nella riga 1.")
         return
 
-    print("📸 Bot Fotografo in modalità Social-Slayer (Solo Foto) attivo!")
+    print("📸 Bot Fotografo (Solo Foto - Bypass Blocco Google) attivo!")
 
     # 2. Scansione Righe
     for i in range(1, len(dati)):
@@ -75,8 +74,7 @@ def main():
             video_temporaneo = "video_social.mp4"
             if os.path.exists(video_temporaneo): os.remove(video_temporaneo)
             
-            # --- FASE A: DOWNLOAD DA FACEBOOK (SOLO IN MEMORIA LOCALE) ---
-            print(f"📥 Estrazione del video dal social in corso...")
+            print("📥 Estrazione del video dal social in corso (solo in memoria locale)...")
             ydl_opts = {
                 'format': 'best',
                 'outtmpl': video_temporaneo,
@@ -87,7 +85,7 @@ def main():
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url_social])
-                print("🟩 Video scaricato su GitHub!")
+                print("🟩 Video scaricato sul server temporaneo!")
             except Exception as e:
                 print(f"⚠️ Impossibile estrarre il video. Errore: {e}")
                 continue
@@ -96,13 +94,11 @@ def main():
                 print("❌ Errore: Video non generato sul server.")
                 continue
 
-            # (Rimosso l'upload del video intero su Google Drive per bypassare il blocco)
-
-            # --- FASE B: SERVIZIO FOTOGRAFICO (5 FOTO) ---
+            # --- SERVIZIO FOTOGRAFICO (5 FOTO) ---
             timestamps = ['00:00:02', '00:00:05', '00:00:08', '00:00:11', '00:00:14']
             formule_foto = []
             
-            print("📸 Scatto 5 fotogrammi sequenziali e li carico su Drive...")
+            print("📸 Scatto 5 fotogrammi e li carico su Drive (ignorando il video pesante)...")
             for idx, ts in enumerate(timestamps):
                 nome_foto_jpg = f"anteprima_{idx+1}.jpg"
                 if os.path.exists(nome_foto_jpg): os.remove(nome_foto_jpg)
@@ -125,7 +121,6 @@ def main():
                     
                     link_foto = f'https://docs.google.com/uc?export=download&id={id_foto}'
                     
-                    # Rende la primissima foto un link cliccabile verso il reel di Facebook
                     if idx == 0 and url_social:
                         formule_foto.append(f'=HYPERLINK("{url_social}"; IMAGE("{link_foto}"))')
                     else:
@@ -135,7 +130,7 @@ def main():
                 else:
                     formule_foto.append("")
 
-            # --- FASE C: SCRITTURA SUL FOGLIO ---
+            # --- SCRITTURA SUL FOGLIO ---
             indices_colonne = [idx_foto1, idx_foto2, idx_foto3, idx_foto4, idx_foto5]
             for pos, formula in enumerate(formule_foto):
                 if formula:
@@ -144,7 +139,7 @@ def main():
             if not str(riga[idx_nome_video]).strip():
                 sheet.update_cell(i + 1, idx_nome_video + 1, nome_video_atteso)
 
-            print(f"✅ Riga {i+1} completata! Book fotografico terminato.")
+            print(f"✅ Riga {i+1} completata! Book fotografico terminato. Il video pesante è stato cestinato.")
             
             if os.path.exists(video_temporaneo): os.remove(video_temporaneo)
 
