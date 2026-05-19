@@ -60,7 +60,7 @@ def main():
     for i in range(1, len(dati)):
         riga = dati[i]
         
-        # 🔥 TRUCCO MAGICO: Se Google ha "tagliato" la riga perché le celle erano vuote, noi la allunghiamo!
+        # Allunga la riga se Google Fogli l'ha tagliata corta
         while len(riga) <= max(idx_link, idx_nome_video, idx_foto5):
             riga.append("")
             
@@ -92,7 +92,7 @@ def main():
                     ydl.download([url_social])
                 print("🟩 Video scaricato con successo dal social!")
             except Exception as e:
-                print(f"⚠️ Impossibile estrarre il video (potrebbe essere privato o rimosso). Errore: {e}")
+                print(f"⚠️ Impossibile estrarre il video. Errore: {e}")
                 continue
 
             if not os.path.exists(video_temporaneo):
@@ -105,7 +105,8 @@ def main():
                 'name': nome_video_atteso,
                 'parents': [target_folder_id]
             }
-            media_video = MediaFileUpload(video_temporaneo, mimeType='video/mp4')
+            # CORRETTO: mimetype tutto minuscolo!
+            media_video = MediaFileUpload(video_temporaneo, mimetype='video/mp4')
             drive_service.files().create(body=video_metadata, media_body=media_video, fields='id').execute()
 
             # --- FASE C: SERVIZIO FOTOGRAFICO (5 FOTO) ---
@@ -127,7 +128,8 @@ def main():
                         'name': f'Copertina_{idx+1}_{nome_video_atteso.split(".")[0]}.jpg',
                         'parents': [target_folder_id]
                     }
-                    media_foto = MediaFileUpload(nome_foto_jpg, mimeType='image/jpeg')
+                    # CORRETTO: mimetype tutto minuscolo!
+                    media_foto = MediaFileUpload(nome_foto_jpg, mimetype='image/jpeg')
                     file_caricato = drive_service.files().create(body=metadata_foto, media_body=media_foto, fields='id').execute()
                     id_foto = file_caricato.get('id')
                     
