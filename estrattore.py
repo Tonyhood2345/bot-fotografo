@@ -1,6 +1,15 @@
 import os
 import json
 import subprocess
+import sys
+
+# Installazione al volo delle librerie necessarie per l'estrazione dai social
+try:
+    import yt_dlp
+except ImportError:
+    subprocess.run([sys.executable, "-m", "pip", "install", "yt-dlp"])
+    import yt_dlp
+
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -19,7 +28,7 @@ def main():
     gc = gspread.authorize(credentials)
     drive_service = build('drive', 'v3', credentials=credentials)
     
-    # Configurazione rigida per Foglio Sorgente e Cartella Destinazione
+    # Coordinate fisse del sistema
     spreadsheet_id = "19m1cStsqyCvzz3-AYFJKPnrLPNaDuCXEKM8Fka76-Hc"
     target_folder_id = "1SpmiG8PJgvJDl2Ac5dptgPZqYi-xl3n2"
     
@@ -30,125 +39,99 @@ def main():
         print("Database vuoto.")
         return
 
-    # Mappatura rigida sulle colonne native del sistema attuale
-    # Colonna J (Indice 9) -> Link (Ospiterà l'immagine cliccabile)
-    # Colonna K (Indice 10) -> Nome_File_Video
-    idx_link = 9
-    idx_nome_video = 10
+    # Mappatura Colonne Dinamica per non sfasciare nulla
+    headers = [h.strip().lower() for h in dati[0]]
+    
+    try:
+        idx_link = headers.index('link')
+        idx_nome_video = headers.index('nome_file_video')
+        
+        # Trova gli indici delle 5 nuove colonne fotografiche
+        idx_foto1 = headers.index('foto_bot_1')
+        idx_foto2 = headers.index('foto_bot_2')
+        idx_foto3 = headers.index('foto_bot_3')
+        idx_foto4 = headers.index('foto_bot_4')
+        idx_foto5 = headers.index('foto_bot_5')
+    except ValueError as e:
+        print(f"❌ Errore: Struttura colonne non allineata. Dettaglio: {e}")
+        print(f"Colonne lette dal bot: {headers}")
+        return
 
-    print("🤖 Bot Fotografo integrato nel sistema esistente. Analizzo i video...")
+    print("📸 Bot Fotografo in modalità Social-Slayer attivo!")
 
-    # 2. Scansione delle Righe del Foglio
+    # 2. Scansione delle Righe
     for i in range(1, len(dati)):
         riga = dati[i]
         
-        if len(riga) <= idx_nome_video:
+        if len(riga) <= max(idx_link, idx_nome_video, idx_foto5):
             continue
             
-        contenuto_link = str(riga[idx_link]).strip()
-        nome_video = str(riga[idx_nome_video]).strip()
+        url_social = str(riga[idx_link]).strip()
+        nome_video_atteso = str(riga[idx_nome_video]).strip()
+        foto1_attuale = str(riga[idx_foto1]).strip()
         
-        # Il bot si attiva SOLO se c'è il nome del file video .mp4
-        # E se la colonna Link contiene ancora un link normale (non è già stata convertita in formula IMAGE)
-        if nome_video and nome_video.endswith('.mp4') and not contenuto_link.startswith('='):
-            print(f"🕵️‍♂️ Riga {i+1}: Trovato video '{nome_video}'.")
+        # Si attiva se c'è un link social valido e non è ancora stata scattata la prima foto
+        if url_social.startswith('http') and not foto1_attuale:
+            print(f"\n🕵️‍♂️ Riga {i+1}: Rilevato link social: {url_social}")
             
-            # Salva il link originale (Facebook/Instagram) per renderlo cliccabile dopo
-            link_originale = contenuto_link if contenuto_link.startswith('http') else ""
-            
-            # Cerca il file nella cartella centralizzata
-            check_query = f"'{target_folder_id}' in parents and name='{nome_video}' and mimeType='video/mp4' and trashed=false"
-            check_results = drive_service.files().list(q=check_query, fields="files(id)").execute()
-            check_files = check_results.get('files', [])
-            
-            video_id = None
-            
-            if check_files:
-                print(f"✨ Il video {nome_video} è già nella cartella centralizzata.")
-                video_id = check_files[0]['id']
-            else:
-                # Se non c'è, scansione totale del Drive per recuperarlo
-                print(f"🔍 File non centralizzato. Lo cerco in tutto il Google Drive...")
-                search_query = f"name='{nome_video}' and mimeType='video/mp4' and trashed=false"
-                search_results = drive_service.files().list(q=search_query, fields="files(id)").execute()
-                search_files = search_results.get('files', [])
-                
-                if not search_files:
-                    print(f"⚠️ Impossibile trovare il file sorgente {nome_video} nel cloud.")
-                    continue
-                
-                sorgente_id = search_files[0]['id']
-                print(f"📥 Download del video originale in corso...")
-                
-                request = drive_service.files().get_media(fileId=sorgente_id)
-                fh = io.FileIO('video_temporaneo.mp4', 'wb')
-                downloader = MediaIoBaseDownload(fh, request)
-                done = False
-                while not done:
-                    status, done = downloader.next_chunk()
-                fh.close()
-                
-                print(f"📤 Salvo una copia nella cartella dei video centralizzati...")
-                video_metadata = {
-                    'name': nome_video,
-                    'parents': [target_folder_id]
-                }
-                media_video = MediaFileUpload('video_temporaneo.mp4', mimeType='video/mp4')
-                nuovo_video = drive_service.files().create(body=video_metadata, media_body=media_video, fields='id').execute()
-                video_id = nuovo_video.get('id')
-            
-            if not os.path.exists('video_temporaneo.mp4') and video_id:
-                request = drive_service.files().get_media(fileId=video_id)
-                fh = io.FileIO('video_temporaneo.mp4', 'wb')
-                downloader = MediaIoBaseDownload(fh, request)
-                done = False
-                while not done:
-                    status, done = downloader.next_chunk()
-                fh.close()
+            # Se non c'è un nome file video preimpostato, lo generiamo noi
+            if not nome_video_atteso or not nome_video_atteso.endswith('.mp4'):
+                nome_video_atteso = f"Video_Riga_{str(i+1).zfill(3)}.mp4"
 
-            # 3. Estrazione fotogramma
-            print("📸 Genero la copertina con FFmpeg...")
-            output_image = 'anteprima.jpg'
-            if os.path.exists(output_image): os.remove(output_image)
+            video_temporaneo = "video_social.mp4"
+            if os.path.exists(video_temporaneo): os.remove(video_temporaneo)
             
-            subprocess.run([
-                'ffmpeg', '-ss', '00:00:03', '-i', 'video_temporaneo.mp4',
-                '-vframes', '1', '-q:v', '2', output_image
-            ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # --- FASE A: SCARICO DA FACEBOOK/SOCIAL ---
+            print(f"📥 Connessione a Facebook/Social in corso per scaricare il video...")
+            ydl_opts = {
+                'format': 'best',
+                'outtmpl': video_temporaneo,
+                'quiet': True,
+                'no_warnings': True
+            }
             
-            if not os.path.exists(output_image):
-                print("❌ Errore durante lo scatto del fotogramma.")
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url_social])
+                print("🟩 Video scaricato con successo dal social!")
+            except Exception as e:
+                print(f"⚠️ Impossibile scaricare il video dal link social. Salto la riga. Info: {e}")
                 continue
-                
-            # 4. Upload della copertina su Drive
-            print("📤 Carico lo screenshot...")
-            file_metadata = {
-                'name': f'Copertina_{nome_video.split(".")[0]}.jpg',
+
+            if not os.path.exists(video_temporaneo):
+                print("❌ Errore critico: Il file video non è stato generato.")
+                continue
+
+            # --- FASE B: TRASLOCO SU GOOGLE DRIVE ---
+            print(f"📤 Centralizzo il video su Google Drive col nome: {nome_video_atteso}")
+            video_metadata = {
+                'name': nome_video_atteso,
                 'parents': [target_folder_id]
             }
-            media_foto = MediaFileUpload(output_image, mimeType='image/jpeg')
-            foto_caricata = drive_service.files().create(body=file_metadata, media_body=media_foto, fields='id').execute()
-            foto_id = foto_caricata.get('id')
-            
-            permission = {'type': 'anyone', 'role': 'reader'}
-            drive_service.permissions().create(fileId=foto_id, body=permission).execute()
-            
-            # 5. Generazione formula ibrida (Foto + Link cliccabile)
-            link_diretto_foto = f'https://docs.google.com/uc?export=download&id={foto_id}'
-            
-            if link_originale:
-                # Se c'era un link social, crea l'immagine cliccabile
-                formula_finale = f'=HYPERLINK("{link_originale}"; IMAGE("{link_diretto_foto}"))'
-            else:
-                # Altrimenti mette solo l'immagine semplice
-                formula_finale = f'=IMAGE("{link_diretto_foto}")'
-            
-            # Aggiorna la colonna J (colonna 10 su gspread) senza spostare nient'altro!
-            sheet.update_cell(i + 1, 10, formula_finale)
-            print(f"✅ Riga {i+1} completata con successo!")
-            
-            if os.path.exists('video_temporaneo.mp4'): os.remove('video_temporaneo.mp4')
-            if os.path.exists('anteprima.jpg'): os.remove('anteprima.jpg')
+            media_video = MediaFileUpload(video_temporaneo, mimeType='video/mp4')
+            drive_service.files().create(body=video_metadata, media_body=media_video, fields='id').execute()
 
-if __name__ == '__main__':
-    main()
+            # --- FASE C: SERVIZIO FOTOGRAFICO (5 FOTO) ---
+            # Secondi esatti in cui scattare i fotogrammi
+            timestamps = ['00:00:02', '00:00:05', '00:00:08', '00:00:11', '00:00:14']
+            formule_foto = []
+            
+            print("📸 Avvio il servizio fotografico... Scatto 5 fotogrammi sequenziali...")
+            for idx, ts in enumerate(timestamps):
+                nome_foto_jpg = f"anteprima_{idx+1}.jpg"
+                if os.path.exists(nome_foto_jpg): os.remove(nome_foto_jpg)
+                
+                # Taglio FFmpeg chirurgico al secondo stabilito
+                subprocess.run([
+                    'ffmpeg', '-ss', ts, '-i', video_temporaneo,
+                    '-vframes', '1', '-q:v', '2', nome_foto_jpg
+                ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+                if os.path.exists(nome_foto_jpg):
+                    # Upload della foto nella cartella centralizzata
+                    metadata_foto = {
+                        'name': f'Copertina_{idx+1}_{nome_video_atteso.split(".")[0]}.jpg',
+                        'parents': [target_folder_id]
+                    }
+                    media_foto = MediaFileUpload(nome_foto_jpg, mimeType='image/jpeg')
+                    file_caricato = drive_service.files().create(body=metadata_foto, media_body=media_foto, fields='id').execute()
