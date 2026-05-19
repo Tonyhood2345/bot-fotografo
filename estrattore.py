@@ -20,10 +20,9 @@ def main():
     drive_service = build('drive', 'v3', credentials=credentials)
     
     # ID del tuo foglio principale e della cartella video centralizzata
-    spreadsheet_id = "1s68pw0WEUcV0ZqltiahAqCp_r5rsycSjxKNh0VZQq_g"
-    target_folder_id = "1SpmiG8PJgvJDl2Ac5dptgPZqYi-xl3n2"
-    
-    sheet = gc.open_by_key(spreadsheet_id).worksheet('DATABASE_IMMOBILI')
+    # ID del nuovo foglio sorgente e nome della scheda
+    spreadsheet_id = "19m1cStsqyCvzz3-AYFJKPnrLPNaDuCXEKM8Fka76-Hc"
+    sheet = gc.open_by_key(spreadsheet_id).worksheet('Foglio1')
     
     dati = sheet.get_all_values()
     if len(dati) <= 1:
