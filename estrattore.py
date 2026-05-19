@@ -8,7 +8,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import io
 
 def main():
-    # 1. Autenticazione Sicura
+    # 1. Autenticazione Sicura con i Server Google
     creds_json = json.loads(os.environ['GOOGLE_CREDENTIALS'])
     scopes = [
         'https://www.googleapis.com/auth/spreadsheets',
@@ -19,8 +19,10 @@ def main():
     gc = gspread.authorize(credentials)
     drive_service = build('drive', 'v3', credentials=credentials)
     
-    # ID del foglio
+    # ID del tuo foglio principale e della cartella video centralizzata
     spreadsheet_id = "1s68pw0WEUcV0ZqltiahAqCp_r5rsycSjxKNh0VZQq_g"
+    target_folder_id = "1SpmiG8PJgvJDl2Ac5dptgPZqYi-xl3n2"
+    
     sheet = gc.open_by_key(spreadsheet_id).worksheet('DATABASE_IMMOBILI')
     
     dati = sheet.get_all_values()
@@ -28,40 +30,38 @@ def main():
         print("Database vuoto.")
         return
 
-    # Mappatura Colonne
+    # Mappatura Colonne Dinamica
     headers = [h.strip().lower() for h in dati[0]]
     try:
-        # Cerca la nuova colonna Copertina_Bot e il Nome File
         idx_copertina = headers.index('copertina_bot')
         idx_nome_video = headers.index('nome_file_video')
     except ValueError:
         print("Errore: Colonna 'Copertina_Bot' o 'Nome_File_Video' non trovata nel foglio.")
         return
 
-    # 2. Scansione Righe
+    # 2. Scansione delle Righe del Foglio
     for i in range(1, len(dati)):
         riga = dati[i]
         copertina_attuale = riga[idx_copertina].strip() if idx_copertina < len(riga) else ""
         nome_video = riga[idx_nome_video].strip() if idx_nome_video < len(riga) else ""
         
-        # Se c'è un file MP4 ma manca la copertina, il bot si attiva!
+        # Il bot si attiva se c'è il nome del file video ma manca la copertina
         if not copertina_attuale and nome_video and nome_video.endswith('.mp4'):
-            print(f"🕵️‍♂️ Trovato immobile senza copertina. Cerco in Drive il file: {nome_video}")
+            print(f"🕵️‍♂️ Riga {i+1}: Cerco '{nome_video}' nella cartella centralizzata...")
             
-            # Radar: Cerca il file in tutto il tuo Google Drive!
-            query = f"name='{nome_video}' and mimeType='video/mp4' and trashed=false"
-            results = drive_service.files().list(q=query, fields="files(id, name, parents)").execute()
+            # Cerca il file ESCLUSIVAMENTE nella cartella indicata
+            query = f"'{target_folder_id}' in parents and name='{nome_video}' and mimeType='video/mp4' and trashed=false"
+            results = drive_service.files().list(q=query, fields="files(id, name)").execute()
             files = results.get('files', [])
             
             if not files:
-                print(f"⚠️ File {nome_video} non trovato in Drive.")
+                print(f"⚠️ File {nome_video} non trovato nella cartella specificata.")
                 continue
                 
             video_id = files[0]['id']
-            # Trova la cartella in cui si trova il video per salvare lì anche la foto
-            folder_id = files[0].get('parents', [''])[0]
-            print(f"🎥 Trovato! Scarico il video temporaneamente...")
+            print(f"🎥 File trovato! Avvio il download temporaneo di: {nome_video}")
             
+            # Download del video nel server di GitHub Actions
             request = drive_service.files().get_media(fileId=video_id)
             fh = io.FileIO('video_temporaneo.mp4', 'wb')
             downloader = MediaIoBaseDownload(fh, request)
@@ -70,8 +70,8 @@ def main():
                 status, done = downloader.next_chunk()
             fh.close()
             
-            # 3. Estrazione fotogramma
-            print("📸 Scatto la fotografia al secondo 3...")
+            # 3. Estrazione del fotogramma al secondo 3
+            print("📸 Scatto la fotografia con FFmpeg...")
             output_image = 'anteprima.jpg'
             if os.path.exists(output_image): os.remove(output_image)
             
@@ -81,31 +81,32 @@ def main():
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             if not os.path.exists(output_image):
-                print("❌ Errore durante lo scatto.")
+                print("❌ Errore durante la generazione dello screenshot.")
                 continue
                 
-            # 4. Upload della foto su Google Drive
-            print("📤 Carico lo screenshot...")
+            # 4. Upload della copertina nella stessa cartella dei video
+            print("📤 Carico lo screenshot nella cartella Drive...")
             file_metadata = {
                 'name': f'Copertina_{nome_video.split(".")[0]}.jpg',
+                'parents': [target_folder_id]
             }
-            if folder_id:
-                file_metadata['parents'] = [folder_id]
 
             media = MediaFileUpload(output_image, mimeType='image/jpeg')
             foto_caricata = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
             foto_id = foto_caricata.get('id')
             
+            # Rende il file visibile pubblicamente via URL per la WebApp
             permission = {'type': 'anyone', 'role': 'reader'}
             drive_service.permissions().create(fileId=foto_id, body=permission).execute()
             
-            # 5. Scrittura nella nuova colonna Z
+            # 5. Scrittura della formula IMAGE sul foglio
             link_diretto_foto = f'https://docs.google.com/uc?export=download&id={foto_id}'
             formula_immagine = f'=IMAGE("{link_diretto_foto}")'
             
             sheet.update_cell(i + 1, idx_copertina + 1, formula_immagine)
-            print(f"✅ Riga {i+1} completata e aggiornata!")
+            print(f"✅ Riga {i+1} aggiornata sul database con la nuova anteprima!")
             
+            # Pulizia file temporanei sul server
             if os.path.exists('video_temporaneo.mp4'): os.remove('video_temporaneo.mp4')
             if os.path.exists('anteprima.jpg'): os.remove('anteprima.jpg')
 
