@@ -19,9 +19,10 @@ def main():
     gc = gspread.authorize(credentials)
     drive_service = build('drive', 'v3', credentials=credentials)
     
-    # ID del tuo foglio principale e della cartella video centralizzata
-    # ID del nuovo foglio sorgente e nome della scheda
+    # ID del nuovo foglio sorgente e ID della cartella video
     spreadsheet_id = "19m1cStsqyCvzz3-AYFJKPnrLPNaDuCXEKM8Fka76-Hc"
+    target_folder_id = "1SpmiG8PJgvJDl2Ac5dptgPZqYi-xl3n2" # 👈 RIMESSO L'ID DELLA CARTELLA!
+    
     sheet = gc.open_by_key(spreadsheet_id).worksheet('Foglio1')
     
     dati = sheet.get_all_values()
@@ -32,10 +33,11 @@ def main():
     # Mappatura Colonne Dinamica
     headers = [h.strip().lower() for h in dati[0]]
     try:
-        idx_copertina = headers.index('copertina_bot')
+        # 👈 ORA CERCA ESATTAMENTE LA COLONNA "ANTEPRIMA"
+        idx_copertina = headers.index('anteprima') 
         idx_nome_video = headers.index('nome_file_video')
     except ValueError:
-        print("Errore: Colonna 'Copertina_Bot' o 'Nome_File_Video' non trovata nel foglio.")
+        print("Errore: Colonna 'Anteprima' o 'Nome_File_Video' non trovata nel foglio.")
         return
 
     # 2. Scansione delle Righe del Foglio
