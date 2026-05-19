@@ -51,16 +51,14 @@ def main():
         idx_foto5 = headers.index('foto_bot_5')
     except ValueError as e:
         print(f"❌ Errore: Colonne mancanti. Assicurati di avere Foto_Bot_1, Foto_Bot_2... scritte bene nella riga 1.")
-        print(f"Colonne rilevate: {headers}")
         return
 
-    print("📸 Bot Fotografo in modalità Social-Slayer attivo!")
+    print("📸 Bot Fotografo in modalità Social-Slayer (Solo Foto) attivo!")
 
     # 2. Scansione Righe
     for i in range(1, len(dati)):
         riga = dati[i]
         
-        # Allunga la riga se Google Fogli l'ha tagliata corta
         while len(riga) <= max(idx_link, idx_nome_video, idx_foto5):
             riga.append("")
             
@@ -68,7 +66,6 @@ def main():
         nome_video_atteso = str(riga[idx_nome_video]).strip()
         foto1_attuale = str(riga[idx_foto1]).strip()
         
-        # Si attiva se c'è un link e manca la prima foto
         if url_social.startswith('http') and not foto1_attuale:
             print(f"\n🕵️‍♂️ Riga {i+1}: Rilevato link social: {url_social}")
             
@@ -78,7 +75,7 @@ def main():
             video_temporaneo = "video_social.mp4"
             if os.path.exists(video_temporaneo): os.remove(video_temporaneo)
             
-            # --- FASE A: DOWNLOAD DA FACEBOOK ---
+            # --- FASE A: DOWNLOAD DA FACEBOOK (SOLO IN MEMORIA LOCALE) ---
             print(f"📥 Estrazione del video dal social in corso...")
             ydl_opts = {
                 'format': 'best',
@@ -90,7 +87,7 @@ def main():
             try:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     ydl.download([url_social])
-                print("🟩 Video scaricato con successo dal social!")
+                print("🟩 Video scaricato su GitHub!")
             except Exception as e:
                 print(f"⚠️ Impossibile estrarre il video. Errore: {e}")
                 continue
@@ -99,21 +96,13 @@ def main():
                 print("❌ Errore: Video non generato sul server.")
                 continue
 
-            # --- FASE B: SALVATAGGIO IN DRIVE ---
-            print(f"📤 Salvo il video su Drive come: {nome_video_atteso}")
-            video_metadata = {
-                'name': nome_video_atteso,
-                'parents': [target_folder_id]
-            }
-            # CORRETTO: mimetype tutto minuscolo!
-            media_video = MediaFileUpload(video_temporaneo, mimetype='video/mp4')
-            drive_service.files().create(body=video_metadata, media_body=media_video, fields='id').execute()
+            # (Rimosso l'upload del video intero su Google Drive per bypassare il blocco)
 
-            # --- FASE C: SERVIZIO FOTOGRAFICO (5 FOTO) ---
+            # --- FASE B: SERVIZIO FOTOGRAFICO (5 FOTO) ---
             timestamps = ['00:00:02', '00:00:05', '00:00:08', '00:00:11', '00:00:14']
             formule_foto = []
             
-            print("📸 Scatto 5 fotogrammi sequenziali...")
+            print("📸 Scatto 5 fotogrammi sequenziali e li carico su Drive...")
             for idx, ts in enumerate(timestamps):
                 nome_foto_jpg = f"anteprima_{idx+1}.jpg"
                 if os.path.exists(nome_foto_jpg): os.remove(nome_foto_jpg)
@@ -128,7 +117,6 @@ def main():
                         'name': f'Copertina_{idx+1}_{nome_video_atteso.split(".")[0]}.jpg',
                         'parents': [target_folder_id]
                     }
-                    # CORRETTO: mimetype tutto minuscolo!
                     media_foto = MediaFileUpload(nome_foto_jpg, mimetype='image/jpeg')
                     file_caricato = drive_service.files().create(body=metadata_foto, media_body=media_foto, fields='id').execute()
                     id_foto = file_caricato.get('id')
@@ -136,12 +124,18 @@ def main():
                     drive_service.permissions().create(fileId=id_foto, body={'type': 'anyone', 'role': 'reader'}).execute()
                     
                     link_foto = f'https://docs.google.com/uc?export=download&id={id_foto}'
-                    formule_foto.append(f'=IMAGE("{link_foto}")')
+                    
+                    # Rende la primissima foto un link cliccabile verso il reel di Facebook
+                    if idx == 0 and url_social:
+                        formule_foto.append(f'=HYPERLINK("{url_social}"; IMAGE("{link_foto}"))')
+                    else:
+                        formule_foto.append(f'=IMAGE("{link_foto}")')
+                        
                     os.remove(nome_foto_jpg)
                 else:
                     formule_foto.append("")
 
-            # --- FASE D: SCRITTURA SUL FOGLIO ---
+            # --- FASE C: SCRITTURA SUL FOGLIO ---
             indices_colonne = [idx_foto1, idx_foto2, idx_foto3, idx_foto4, idx_foto5]
             for pos, formula in enumerate(formule_foto):
                 if formula:
@@ -150,7 +144,7 @@ def main():
             if not str(riga[idx_nome_video]).strip():
                 sheet.update_cell(i + 1, idx_nome_video + 1, nome_video_atteso)
 
-            print(f"✅ Riga {i+1} completata! Trasloco e book fotografico terminati.")
+            print(f"✅ Riga {i+1} completata! Book fotografico terminato.")
             
             if os.path.exists(video_temporaneo): os.remove(video_temporaneo)
 
