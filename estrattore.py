@@ -19,9 +19,9 @@ def main():
     gc = gspread.authorize(credentials)
     drive_service = build('drive', 'v3', credentials=credentials)
     
-    # ID del nuovo foglio sorgente e ID della cartella video
+    # coordinate blindate: Foglio Sorgente e Cartella Drive Centralizzata
     spreadsheet_id = "19m1cStsqyCvzz3-AYFJKPnrLPNaDuCXEKM8Fka76-Hc"
-    target_folder_id = "1SpmiG8PJgvJDl2Ac5dptgPZqYi-xl3n2" # 👈 RIMESSO L'ID DELLA CARTELLA!
+    target_folder_id = "1SpmiG8PJgvJDl2Ac5dptgPZqYi-xl3n2"
     
     sheet = gc.open_by_key(spreadsheet_id).worksheet('Foglio1')
     
@@ -30,14 +30,14 @@ def main():
         print("Database vuoto.")
         return
 
-    # Mappatura Colonne Dinamica
+    # Mappatura Colonne: Cerca esattamente le tue intestazioni!
     headers = [h.strip().lower() for h in dati[0]]
     try:
-        # 👈 ORA CERCA ESATTAMENTE LA COLONNA "ANTEPRIMA"
-        idx_copertina = headers.index('anteprima') 
+        idx_copertina = headers.index('copertina_bot') # 👈 ORA CERCA LA TUA COLONNA ESATTA
         idx_nome_video = headers.index('nome_file_video')
     except ValueError:
-        print("Errore: Colonna 'Anteprima' o 'Nome_File_Video' non trovata nel foglio.")
+        print("Errore: Colonna 'Copertina_Bot' o 'Nome_File_Video' non trovata nella prima riga del foglio.")
+        print(f"Colonne trovate: {headers}")
         return
 
     # 2. Scansione delle Righe del Foglio
@@ -46,11 +46,11 @@ def main():
         copertina_attuale = riga[idx_copertina].strip() if idx_copertina < len(riga) else ""
         nome_video = riga[idx_nome_video].strip() if idx_nome_video < len(riga) else ""
         
-        # Il bot si attiva se c'è il nome del file video ma manca la copertina
+        # Il bot si attiva se c'è il nome del file video ma manca la formula dell'immagine
         if not copertina_attuale and nome_video and nome_video.endswith('.mp4'):
             print(f"🕵️‍♂️ Riga {i+1}: Cerco '{nome_video}' nella cartella centralizzata...")
             
-            # Cerca il file ESCLUSIVAMENTE nella cartella indicata
+            # Cerca il file ESCLUSIVAMENTE nella cartella Drive indicata
             query = f"'{target_folder_id}' in parents and name='{nome_video}' and mimeType='video/mp4' and trashed=false"
             results = drive_service.files().list(q=query, fields="files(id, name)").execute()
             files = results.get('files', [])
@@ -62,7 +62,7 @@ def main():
             video_id = files[0]['id']
             print(f"🎥 File trovato! Avvio il download temporaneo di: {nome_video}")
             
-            # Download del video nel server di GitHub Actions
+            # Download del video nel server di GitHub
             request = drive_service.files().get_media(fileId=video_id)
             fh = io.FileIO('video_temporaneo.mp4', 'wb')
             downloader = MediaIoBaseDownload(fh, request)
@@ -107,7 +107,7 @@ def main():
             sheet.update_cell(i + 1, idx_copertina + 1, formula_immagine)
             print(f"✅ Riga {i+1} aggiornata sul database con la nuova anteprima!")
             
-            # Pulizia file temporanei sul server
+            # Pulizia file temporanei
             if os.path.exists('video_temporaneo.mp4'): os.remove('video_temporaneo.mp4')
             if os.path.exists('anteprima.jpg'): os.remove('anteprima.jpg')
 
