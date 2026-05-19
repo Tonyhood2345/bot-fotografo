@@ -8,7 +8,7 @@ from googleapiclient.http import MediaIoBaseDownload, MediaFileUpload
 import io
 
 def main():
-    # 1. Autenticazione Sicura
+    # 1. Autenticazione Sicura con i Server Google
     creds_json = json.loads(os.environ['GOOGLE_CREDENTIALS'])
     scopes = [
         'https://www.googleapis.com/auth/spreadsheets',
@@ -19,7 +19,7 @@ def main():
     gc = gspread.authorize(credentials)
     drive_service = build('drive', 'v3', credentials=credentials)
     
-    # Coordinate fisse
+    # Configurazione rigida per Foglio Sorgente e Cartella Destinazione
     spreadsheet_id = "19m1cStsqyCvzz3-AYFJKPnrLPNaDuCXEKM8Fka76-Hc"
     target_folder_id = "1SpmiG8PJgvJDl2Ac5dptgPZqYi-xl3n2"
     
@@ -30,27 +30,33 @@ def main():
         print("Database vuoto.")
         return
 
-    # 🎯 FIX DEFINITIVO: Usiamo indici numerici fissi
-    # Colonna J è l'indice 9 (partendo da 0) -> Copertina
-    # Colonna L è l'indice 11 (partendo da 0) -> Nome_File_Video
-    idx_copertina = 9
-    idx_nome_video = 11
+    # Mappatura rigida sulle colonne native del sistema attuale
+    # Colonna J (Indice 9) -> Link (Ospiterà l'immagine cliccabile)
+    # Colonna K (Indice 10) -> Nome_File_Video
+    idx_link = 9
+    idx_nome_video = 10
 
-    # 2. Scansione delle Righe
+    print("🤖 Bot Fotografo integrato nel sistema esistente. Analizzo i video...")
+
+    # 2. Scansione delle Righe del Foglio
     for i in range(1, len(dati)):
         riga = dati[i]
         
-        # Evita errori se la riga è troppo corta
         if len(riga) <= idx_nome_video:
             continue
             
-        copertina_attuale = str(riga[idx_copertina]).strip() if len(riga) > idx_copertina else ""
+        contenuto_link = str(riga[idx_link]).strip()
         nome_video = str(riga[idx_nome_video]).strip()
         
-        if not copertina_attuale and nome_video and nome_video.endswith('.mp4'):
-            print(f"🕵️‍♂️ Riga {i+1}: Avvio procedura per {nome_video}")
+        # Il bot si attiva SOLO se c'è il nome del file video .mp4
+        # E se la colonna Link contiene ancora un link normale (non è già stata convertita in formula IMAGE)
+        if nome_video and nome_video.endswith('.mp4') and not contenuto_link.startswith('='):
+            print(f"🕵️‍♂️ Riga {i+1}: Trovato video '{nome_video}'.")
             
-            # Controlla se il video è già nella cartella centralizzata
+            # Salva il link originale (Facebook/Instagram) per renderlo cliccabile dopo
+            link_originale = contenuto_link if contenuto_link.startswith('http') else ""
+            
+            # Cerca il file nella cartella centralizzata
             check_query = f"'{target_folder_id}' in parents and name='{nome_video}' and mimeType='video/mp4' and trashed=false"
             check_results = drive_service.files().list(q=check_query, fields="files(id)").execute()
             check_files = check_results.get('files', [])
@@ -61,17 +67,18 @@ def main():
                 print(f"✨ Il video {nome_video} è già nella cartella centralizzata.")
                 video_id = check_files[0]['id']
             else:
-                print(f"🔍 Cerco il file originale {nome_video} nel Drive...")
+                # Se non c'è, scansione totale del Drive per recuperarlo
+                print(f"🔍 File non centralizzato. Lo cerco in tutto il Google Drive...")
                 search_query = f"name='{nome_video}' and mimeType='video/mp4' and trashed=false"
-                search_results = drive_service.files().list(q=search_query, fields="files(id, name)").execute()
+                search_results = drive_service.files().list(q=search_query, fields="files(id)").execute()
                 search_files = search_results.get('files', [])
                 
                 if not search_files:
-                    print(f"⚠️ Impossibile trovare {nome_video} su tutto il Drive.")
+                    print(f"⚠️ Impossibile trovare il file sorgente {nome_video} nel cloud.")
                     continue
                 
                 sorgente_id = search_files[0]['id']
-                print(f"📥 Scarico e sposto il video...")
+                print(f"📥 Download del video originale in corso...")
                 
                 request = drive_service.files().get_media(fileId=sorgente_id)
                 fh = io.FileIO('video_temporaneo.mp4', 'wb')
@@ -81,7 +88,7 @@ def main():
                     status, done = downloader.next_chunk()
                 fh.close()
                 
-                print(f"📤 Salvo la copia centralizzata...")
+                print(f"📤 Salvo una copia nella cartella dei video centralizzati...")
                 video_metadata = {
                     'name': nome_video,
                     'parents': [target_folder_id]
@@ -99,7 +106,8 @@ def main():
                     status, done = downloader.next_chunk()
                 fh.close()
 
-            print("📸 Scatto la fotografia al secondo 3...")
+            # 3. Estrazione fotogramma
+            print("📸 Genero la copertina con FFmpeg...")
             output_image = 'anteprima.jpg'
             if os.path.exists(output_image): os.remove(output_image)
             
@@ -109,10 +117,11 @@ def main():
             ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             
             if not os.path.exists(output_image):
-                print("❌ Errore FFmpeg durante lo scatto.")
+                print("❌ Errore durante lo scatto del fotogramma.")
                 continue
                 
-            print("📤 Carico la copertina su Drive...")
+            # 4. Upload della copertina su Drive
+            print("📤 Carico lo screenshot...")
             file_metadata = {
                 'name': f'Copertina_{nome_video.split(".")[0]}.jpg',
                 'parents': [target_folder_id]
@@ -124,12 +133,19 @@ def main():
             permission = {'type': 'anyone', 'role': 'reader'}
             drive_service.permissions().create(fileId=foto_id, body=permission).execute()
             
+            # 5. Generazione formula ibrida (Foto + Link cliccabile)
             link_diretto_foto = f'https://docs.google.com/uc?export=download&id={foto_id}'
-            formula_immagine = f'=IMAGE("{link_diretto_foto}")'
             
-            # Scrittura forzata nella colonna J (indice 10 su gspread)
-            sheet.update_cell(i + 1, 10, formula_immagine)
-            print(f"✅ Riga {i+1} completata con successo.")
+            if link_originale:
+                # Se c'era un link social, crea l'immagine cliccabile
+                formula_finale = f'=HYPERLINK("{link_originale}"; IMAGE("{link_diretto_foto}"))'
+            else:
+                # Altrimenti mette solo l'immagine semplice
+                formula_finale = f'=IMAGE("{link_diretto_foto}")'
+            
+            # Aggiorna la colonna J (colonna 10 su gspread) senza spostare nient'altro!
+            sheet.update_cell(i + 1, 10, formula_finale)
+            print(f"✅ Riga {i+1} completata con successo!")
             
             if os.path.exists('video_temporaneo.mp4'): os.remove('video_temporaneo.mp4')
             if os.path.exists('anteprima.jpg'): os.remove('anteprima.jpg')
